@@ -62,11 +62,20 @@ class FileSyncService {
         'date': DateTime.now().toString().substring(0, 16),
         'desc': 'Nový SQL skript...',
         'version': '1.0.0',
-        'originalPath': filePath
+        'originalPath': filePath,
+        'isDeleted': false
       };
       await _metadataFile.writeAsString(jsonEncode(data), flush: true);
     }
   }
+  Future<void> restoreEntry(String key) async {
+  final data = await _readJson();
+  if (data.containsKey(key)) {
+    data[key]['isDeleted'] = false; // Vrátíme zpět mezi živé
+    await _metadataFile.writeAsString(jsonEncode(data), flush: true);
+    refresh();
+  }
+}
 
   Future<void> refresh() async {
     _metadataController.add(await _readJson());
@@ -84,7 +93,8 @@ class FileSyncService {
     Future<void> deleteEntry(String key) async {
     final data = await _readJson();
     if (data.containsKey(key)) {
-      data.remove(key);
+      //data.remove(key);
+      data[key]['isDeleted'] = true;
       await _metadataFile.writeAsString(jsonEncode(data), flush: true);
       refresh();
     }

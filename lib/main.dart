@@ -21,9 +21,16 @@ class SqlManagerScreen extends StatefulWidget {
 
 class _SqlManagerScreenState extends State<SqlManagerScreen> {
   late final FileSyncService _fileService;
+  bool _showDeleted = false;
   
  
-  Map<String, String> _dbConfig = {'host': '', 'user': '', 'pass': ''};
+Map<String, String> _dbConfig = {
+  'type': 'MySQL', 
+  'host': '', 
+  'user': '', 
+  'pass': '', 
+  'dbName': '' 
+};
 
   @override
   void initState() {
@@ -64,7 +71,6 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
         await _executePostgres(sql);
       }
 
-      _showSnackBar('$fileName úspěšně nahrán!');
     } catch (e) {
       _showSnackBar('Chyba: $e', isError: true);
     }
@@ -118,7 +124,12 @@ Future<void> _executePostgres(String sql) async {
         backgroundColor: Colors.blueGrey[900],
         foregroundColor: Colors.white,
         actions: [
-          // Tlačítko pro nastavení DB v pravém horním rohu
+          IconButton(
+            icon: Icon(_showDeleted ? Icons.visibility : Icons.visibility_off),
+            tooltip: _showDeleted ? 'Skrýt smazané' : 'Zobrazit smazané',
+            color: _showDeleted ? Colors.orange : null,
+            onPressed: () => setState(() => _showDeleted = !_showDeleted),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_input_component),
             tooltip: 'Nastavení databáze',
@@ -130,39 +141,80 @@ Future<void> _executePostgres(String sql) async {
         stream: _fileService.metadataStream,
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('Čekám na .sql soubory v /shared...'));
+            return const Center(child: Text('Složka /shared je prázdná'));
           }
 
-          final items = snapshot.data!;
+          
+          final allKeys = snapshot.data!;
+          
+          final displayedKeys = allKeys.keys.where((k) {
+            final isDeleted = allKeys[k]['isDeleted'] == true;
+            return _showDeleted ? true : !isDeleted;
+          }).toList();
+            
+
+          if (displayedKeys.isEmpty) {
+            return const Center(child: Text('Všechny soubory jsou v koši.'));
+          }
+
+        
           return ListView.builder(
-            itemCount: items.length,
+            itemCount: displayedKeys.length,
             itemBuilder: (context, index) {
-              final key = items.keys.elementAt(index);
-              final meta = items[key];
+              final key = displayedKeys.elementAt(index);
+              final meta = allKeys[key];
+              final bool isDeleted = meta['isDeleted'] == true;
+
               
               return Card(
-                margin: const EdgeInsets.all(8),
+                color: isDeleted ? Colors.grey.shade200.withValues(alpha: 0.6) : null,
+                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 child: ListTile(
-                  leading: const Icon(Icons.storage, color: Colors.blue),
-                  title: Text(meta['displayName']),
+                  leading: Icon(
+                    Icons.storage, 
+                    color: isDeleted ? Colors.grey : Colors.blue
+                  ),
+                  title: Text(
+                    meta['displayName'] ?? key,
+                    style: TextStyle(
+                      color: isDeleted ? Colors.grey : Colors.black87,
+                      decoration: isDeleted ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
                   subtitle: Text(meta['desc']),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+                 trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    
+                    if (!isDeleted) ...[
                       IconButton(
                         icon: const Icon(Icons.upload, color: Colors.green),
+                        tooltip: 'Upload to DB',
                         onPressed: () => _uploadToDb(key),
                       ),
                       IconButton(
                         icon: const Icon(Icons.edit, color: Colors.blue),
+                        tooltip: 'Edit Metadata',
                         onPressed: () => _showEditDialog(key, meta),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
-                        onPressed: ()=> _confirmDelete(key),
-                      )
                     ],
-                  ),
+                    IconButton(
+                      icon: Icon(
+                        isDeleted ? Icons.restore : Icons.delete_outline, 
+                        color: isDeleted ? Colors.blue : Colors.red
+                      ),
+                      tooltip: isDeleted ? 'Obnovit' : 'Smazat',
+                      onPressed: () {
+                        if (isDeleted) {
+                          _fileService.restoreEntry(key);
+                        } else {
+                          _confirmDelete(key);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+
                 ),
               );
             },
@@ -249,6 +301,7 @@ Future<void> _executePostgres(String sql) async {
   void _showEditDialog(String key, dynamic meta) {
     final nameCtrl = TextEditingController(text: meta['displayName']);
     final descCtrl = TextEditingController(text: meta['desc']);
+    final fileCtrl = TextEditingController(text: p.basename(meta['originalPath']));
 
     showDialog(
       context: context,
@@ -257,8 +310,20 @@ Future<void> _executePostgres(String sql) async {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Zobrazované jméno')),
-            TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Popis')),
+            TextField(
+              controller: nameCtrl, 
+              decoration: const InputDecoration(labelText: 'Zobrazované jméno')
+              ),
+            TextField(
+              controller: descCtrl, 
+              decoration: const InputDecoration(labelText: 'Popis')
+              ),
+            TextField(
+              controller: fileCtrl, 
+              decoration: const InputDecoration(labelText: 'Soubor'),
+              readOnly: true
+              ),
+             
           ],
         ),
         actions: [

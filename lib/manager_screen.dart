@@ -20,6 +20,7 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
   late StreamController<Map<String, dynamic>> _metadataController;
   late DirectoryWatcher _watcher;
 
+
   @override
   void initState() {
     super.initState();
@@ -47,12 +48,14 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
         data[name] = {
           'displayName': name,
           'date': DateTime.now().toString().split('.')[0],
-          'desc': 'Nový soubor...'
+          'desc': 'Nový soubor...',
+          
+
         };
         await metadataFile.writeAsString(jsonEncode(data));
       }
     }
-    _loadMetadata(); // Refresh streamu pro UI
+    _loadMetadata(); 
   }
 
   Future<void> _loadMetadata() async {
