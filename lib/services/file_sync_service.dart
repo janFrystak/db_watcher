@@ -17,6 +17,7 @@ class FileSyncService {
 
   void init() {
     _ensureDirsExist();
+    scanExistingFiles();
     _startWatching();
     refresh(); 
   }
@@ -36,6 +37,19 @@ class FileSyncService {
       }
       refresh();
     });
+  }
+
+  Future<void> scanExistingFiles() async {
+    final dir = Directory(sharedPath);
+    if (dir.existsSync()) {
+      final entities = dir.listSync();
+      for (var entity in entities) {
+        if (entity is File && entity.path.endsWith('.sql')) {
+          await _autoLogNewFile(entity.path);
+        }
+      }
+      refresh();
+    }
   }
 
   Future<void> _autoLogNewFile(String filePath) async {
@@ -64,6 +78,15 @@ class FileSyncService {
       return jsonDecode(await _metadataFile.readAsString());
     } catch (_) {
       return {};
+    }
+  }
+
+    Future<void> deleteEntry(String key) async {
+    final data = await _readJson();
+    if (data.containsKey(key)) {
+      data.remove(key);
+      await _metadataFile.writeAsString(jsonEncode(data), flush: true);
+      refresh();
     }
   }
 

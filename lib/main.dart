@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'services/file_sync_service.dart';
+import 'package:postgres/postgres.dart';
+import 'package:mysql_client/mysql_client.dart';
 
 void main() {
   runApp(const MaterialApp(
@@ -20,7 +22,7 @@ class SqlManagerScreen extends StatefulWidget {
 class _SqlManagerScreenState extends State<SqlManagerScreen> {
   late final FileSyncService _fileService;
   
-  // Dočasné uložení login údajů (v produkci použij flutter_secure_storage)
+ 
   Map<String, String> _dbConfig = {'host': '', 'user': '', 'pass': ''};
 
   @override
@@ -44,27 +46,68 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
   // Simulace nahrání do DB
   Future<void> _uploadToDb(String fileName) async {
     if (_dbConfig['host']!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nejdříve nastavte DB připojení!')),
-      );
+      _showSnackBar('Nejdříve nastavte DB připojení!');
       return;
     }
 
     // Načtení obsahu SQL souboru
     final file = File(p.join(_fileService.sharedPath, fileName));
     final sql = await file.readAsString();
+    final dbType = _dbConfig['type'];
 
-    debugPrint('Nahrávám na ${_dbConfig['host']} uživatelem ${_dbConfig['user']}...');
-    debugPrint('SQL kód: ${sql.substring(0, sql.length > 30 ? 30 : sql.length)}...');
+    try {
+      _showSnackBar('Odesílám do $dbType...');
 
-    // TODO: Zde použijte balíček 'postgres' nebo 'mysql_client'
-    await Future.delayed(const Duration(seconds: 1)); // Simulace sítě
+      if (dbType == 'MySQL') {
+        await _executeMysql(sql);
+      } else if (dbType == 'PostgreSQL') {
+        await _executePostgres(sql);
+      }
+
+      _showSnackBar('$fileName úspěšně nahrán!');
+    } catch (e) {
+      _showSnackBar('Chyba: $e', isError: true);
+    }
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$fileName úspěšně nahrán!')),
-      );
+      _showSnackBar('$fileName úspěšně nahrán!');
     }
+  }
+
+  Future<void> _executeMysql(String sql) async {
+  final conn = await MySQLConnection.createConnection(
+    host: _dbConfig['host']!,
+    port: 3306,
+    userName: _dbConfig['user']!,
+    password: _dbConfig['pass']!,
+    databaseName: _dbConfig['dbName'],
+  );
+  await conn.connect();
+  await conn.execute(sql);
+  await conn.close();
+  }
+
+Future<void> _executePostgres(String sql) async {
+  final connection = await Connection.open(
+    Endpoint(
+      host: _dbConfig['host']!,
+      database: _dbConfig['dbName']!,
+      username: _dbConfig['user'],
+      password: _dbConfig['pass'],
+    ),
+    settings: const ConnectionSettings(sslMode: SslMode.disable),
+  );
+  await connection.execute(sql);
+  await connection.close();
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(message),
+      backgroundColor: isError ? Colors.red : Colors.green,
+    ),
+  );
   }
 
   @override
@@ -111,9 +154,13 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
                         onPressed: () => _uploadToDb(key),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.edit),
+                        icon: const Icon(Icons.edit, color: Colors.blue),
                         onPressed: () => _showEditDialog(key, meta),
                       ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                        onPressed: ()=> _confirmDelete(key),
+                      )
                     ],
                   ),
                 ),
@@ -124,19 +171,53 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
       ),
     );
   }
+  void _confirmDelete(String key) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Smazat záznam?'),
+      content: Text('Chcete odstranit metadata pro $key? (Soubor na disku zůstane)'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Zrušit')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+          onPressed: () {
+            _fileService.deleteEntry(key);
+            Navigator.pop(ctx);
+          },
+          child: const Text('Smazat'),
+        ),
+      ],
+    ),
+  );
+  }
 
   void _showDbSettings() {
-    final hostCtrl = TextEditingController(text: _dbConfig['host']);
-    final userCtrl = TextEditingController(text: _dbConfig['user']);
-    final passCtrl = TextEditingController(text: _dbConfig['pass']);
+  final hostCtrl = TextEditingController(text: _dbConfig['host']);
+  final userCtrl = TextEditingController(text: _dbConfig['user']);
+  final passCtrl = TextEditingController(text: _dbConfig['pass']);
+  
+  String selectedType = _dbConfig['type'] ?? 'MySQL';
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
         title: const Text('Konfigurace DB'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            DropdownButtonFormField<String>(
+              initialValue: selectedType,
+              decoration: const InputDecoration(labelText: 'Typ databáze'),
+              items: const [
+                DropdownMenuItem(value: 'MySQL', child: Text('MySQL')),
+                DropdownMenuItem(value: 'PostgreSQL', child: Text('PostgreSQL')),
+              ],
+              onChanged: (val) {
+                setDialogState(() => selectedType = val!);
+              },
+            ),
             TextField(controller: hostCtrl, decoration: const InputDecoration(labelText: 'Host (IP/Doména)')),
             TextField(controller: userCtrl, decoration: const InputDecoration(labelText: 'Uživatel')),
             TextField(controller: passCtrl, decoration: const InputDecoration(labelText: 'Heslo'), obscureText: true),
@@ -147,7 +228,12 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
           ElevatedButton(
             onPressed: () {
               setState(() {
-                _dbConfig = {'host': hostCtrl.text, 'user': userCtrl.text, 'pass': passCtrl.text};
+                _dbConfig = {
+                  'type': selectedType,
+                  'host': hostCtrl.text,
+                  'user': userCtrl.text,
+                  'pass': passCtrl.text,
+                };
               });
               Navigator.pop(ctx);
             },
@@ -155,8 +241,10 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
+
 
   void _showEditDialog(String key, dynamic meta) {
     final nameCtrl = TextEditingController(text: meta['displayName']);

@@ -40,7 +40,6 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
   Future<void> _handleFileChange(WatchEvent event) async {
     final metadataFile = File(p.join(sharedPath, 'metadata.json'));
     
-    // Pokud přibyl SQL, dopíšeme ho do JSONu (pokud tam není)
     if (event.type == ChangeType.ADD && event.path.endsWith('.sql')) {
       Map<String, dynamic> data = await _readJson(metadataFile);
       String name = p.basename(event.path);
@@ -101,7 +100,7 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
         },
       ),
     );
-  }
+  }   
 
   void _showLogin(BuildContext context) {
     showDialog(

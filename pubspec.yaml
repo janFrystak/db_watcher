@@ -9,7 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  mysql_client: ^0.0.27
   path: ^1.9.1
+  postgres: ^3.5.9
   watcher: ^1.2.1
 
 dev_dependencies:
