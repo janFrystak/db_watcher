@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'services/file_sync_service.dart';
@@ -21,6 +22,7 @@ class SqlManagerScreen extends StatefulWidget {
 
 class _SqlManagerScreenState extends State<SqlManagerScreen> {
   late final FileSyncService _fileService;
+  late final String _memPath;
   bool _showDeleted = false;
 
   Map<String, String> _dbConfig = {
@@ -31,13 +33,30 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
     'dbName': ''
   };
 
+  File get _dbConfigFile => File(p.join(_memPath, 'db_config.json'));
+
+  Future<void> _saveDbConfig() async {
+    await _dbConfigFile.writeAsString(jsonEncode(_dbConfig), flush: true);
+  }
+
+  Future<void> _loadDbConfig() async {
+    if (!_dbConfigFile.existsSync()) return;
+    try {
+      final raw = jsonDecode(await _dbConfigFile.readAsString());
+      setState(() {
+        _dbConfig = Map<String, String>.from(raw);
+      });
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
     final sharedPath = p.join(Directory.current.path, 'shared');
-    final memPath = p.join(Directory.current.path, 'mem');
-    _fileService = FileSyncService(sharedPath: sharedPath, memPath: memPath);
+    _memPath = p.join(Directory.current.path, 'mem');
+    _fileService = FileSyncService(sharedPath: sharedPath, memPath: _memPath);
     _fileService.init();
+    _loadDbConfig();
   }
 
   @override
@@ -65,7 +84,8 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
         await _executePostgres(sql);
       }
 
-
+      // FIX 3: success snackbar only fires if no exception was thrown
+      await _fileService.markUploaded(fileName);
       if (mounted) _showSnackBar('$fileName úspěšně nahrán!');
     } catch (e) {
       if (mounted) _showSnackBar('Chyba: $e', isError: true);
@@ -82,6 +102,7 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
     );
     await conn.connect();
 
+    // FIX 4: split multi-statement SQL and execute each separately
     final statements = sql
         .split(';')
         .map((s) => s.trim())
@@ -102,10 +123,11 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
         username: _dbConfig['user'],
         password: _dbConfig['pass'],
       ),
-
+      // FIX 1: Neon requires SSL — was SslMode.disable
       settings: const ConnectionSettings(sslMode: SslMode.require),
     );
 
+    // FIX 4: split multi-statement SQL and execute each separately
     final statements = sql
         .split(';')
         .map((s) => s.trim())
@@ -187,7 +209,27 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
                       decoration: isDeleted ? TextDecoration.lineThrough : null,
                     ),
                   ),
-                  subtitle: Text(meta['desc']),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(meta['desc']),
+                      if (meta['lastUploadedAt'] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.cloud_done, size: 13, color: Colors.green),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Uploaded ${meta['lastUploadedAt']}',
+                                style: const TextStyle(fontSize: 11, color: Colors.green),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -308,6 +350,7 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
                     'dbName': dbNameCtrl.text,
                   };
                 });
+                _saveDbConfig();
                 Navigator.pop(ctx);
               },
               child: const Text('Uložit'),

@@ -12,14 +12,13 @@ class FileSyncService {
 
   FileSyncService({required this.sharedPath, required this.memPath});
 
-
   Stream<Map<String, dynamic>> get metadataStream => _metadataController.stream;
 
   void init() {
     _ensureDirsExist();
     scanExistingFiles();
     _startWatching();
-    refresh(); 
+    refresh();
   }
 
   void _ensureDirsExist() {
@@ -27,7 +26,7 @@ class FileSyncService {
     Directory(memPath).createSync(recursive: true);
   }
 
-   File get _metadataFile => File(p.join(memPath, 'metadata.json'));
+  File get _metadataFile => File(p.join(memPath, 'metadata.json'));
 
   void _startWatching() {
     final watcher = DirectoryWatcher(sharedPath);
@@ -63,19 +62,30 @@ class FileSyncService {
         'desc': 'Nový SQL skript...',
         'version': '1.0.0',
         'originalPath': filePath,
-        'isDeleted': false
+        'isDeleted': false,
+        'lastUploadedAt': null,
       };
       await _metadataFile.writeAsString(jsonEncode(data), flush: true);
     }
   }
-  Future<void> restoreEntry(String key) async {
-  final data = await _readJson();
-  if (data.containsKey(key)) {
-    data[key]['isDeleted'] = false; // Vrátíme zpět mezi živé
-    await _metadataFile.writeAsString(jsonEncode(data), flush: true);
-    refresh();
+
+  Future<void> markUploaded(String key) async {
+    final data = await _readJson();
+    if (data.containsKey(key)) {
+      data[key]['lastUploadedAt'] = DateTime.now().toString().substring(0, 16);
+      await _metadataFile.writeAsString(jsonEncode(data), flush: true);
+      refresh();
+    }
   }
-}
+
+  Future<void> restoreEntry(String key) async {
+    final data = await _readJson();
+    if (data.containsKey(key)) {
+      data[key]['isDeleted'] = false;
+      await _metadataFile.writeAsString(jsonEncode(data), flush: true);
+      refresh();
+    }
+  }
 
   Future<void> refresh() async {
     _metadataController.add(await _readJson());
@@ -90,10 +100,9 @@ class FileSyncService {
     }
   }
 
-    Future<void> deleteEntry(String key) async {
+  Future<void> deleteEntry(String key) async {
     final data = await _readJson();
     if (data.containsKey(key)) {
-      //data.remove(key);
       data[key]['isDeleted'] = true;
       await _metadataFile.writeAsString(jsonEncode(data), flush: true);
       refresh();
