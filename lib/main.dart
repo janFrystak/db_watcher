@@ -84,7 +84,7 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
         await _executePostgres(sql);
       }
 
-      // FIX 3: success snackbar only fires if no exception was thrown
+
       await _fileService.markUploaded(fileName);
       if (mounted) _showSnackBar('$fileName úspěšně nahrán!');
     } catch (e) {
@@ -102,7 +102,7 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
     );
     await conn.connect();
 
-    // FIX 4: split multi-statement SQL and execute each separately
+
     final statements = sql
         .split(';')
         .map((s) => s.trim())
@@ -123,11 +123,11 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
         username: _dbConfig['user'],
         password: _dbConfig['pass'],
       ),
-      // FIX 1: Neon requires SSL — was SslMode.disable
+
       settings: const ConnectionSettings(sslMode: SslMode.require),
     );
 
-    // FIX 4: split multi-statement SQL and execute each separately
+
     final statements = sql
         .split(';')
         .map((s) => s.trim())
@@ -296,7 +296,7 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
     final hostCtrl = TextEditingController(text: _dbConfig['host']);
     final userCtrl = TextEditingController(text: _dbConfig['user']);
     final passCtrl = TextEditingController(text: _dbConfig['pass']);
-    // FIX 2: dbName controller was missing — field existed but was never saved
+
     final dbNameCtrl = TextEditingController(text: _dbConfig['dbName']);
 
     String selectedType = _dbConfig['type'] ?? 'MySQL';
@@ -330,7 +330,7 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
                   controller: passCtrl,
                   decoration: const InputDecoration(labelText: 'Heslo'),
                   obscureText: true),
-              // FIX 2: dbName field was in the form but controller was never wired up
+   
               TextField(
                   controller: dbNameCtrl,
                   decoration: const InputDecoration(labelText: 'Název databáze')),
@@ -346,7 +346,7 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
                     'host': hostCtrl.text,
                     'user': userCtrl.text,
                     'pass': passCtrl.text,
-                    // FIX 2: actually persist dbName
+                 
                     'dbName': dbNameCtrl.text,
                   };
                 });

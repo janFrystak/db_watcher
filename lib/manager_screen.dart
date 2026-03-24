@@ -95,7 +95,7 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
                   title: Text(item['displayName']),
                   subtitle: Text("${item['date']} - ${item['desc']}"),
                   trailing: Icon(Icons.edit),
-                  onTap: () => /* TODO: Otevřít editaci */ print("Edit $key"),
+          
                 ),
               );
             },
@@ -104,7 +104,7 @@ class _SqlManagerScreenState extends State<SqlManagerScreen> {
       ),
     );
   }   
-
+  
   void _showLogin(BuildContext context) {
     showDialog(
       context: context,
