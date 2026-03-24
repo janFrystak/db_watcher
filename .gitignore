@@ -46,3 +46,4 @@ app.*.map.json
 
 /shared
 /mem
+db_watcher\mem
